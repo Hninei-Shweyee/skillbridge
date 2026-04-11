@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SkillBridge — Learn Real-World AI Skills</title>
+    <!-- GitHub Pages SPA redirect: restore path encoded by 404.html -->
+    <script>
+      (function(){
+        var p = window.location.search.match(/[?&]p=([^&]*)/);
+        if (p) {
+          window.history.replaceState(
+            null, null,
+            window.location.pathname.split('/').slice(0, 2).join('/') +
+            '/' + decodeURIComponent(p[1])
+          );
+        }
+      })();
+    </script>
     <meta name="description" content="Practical AI skills for Myanmar learners. Join SkillBridge and master real-world tools." />
 
     <!-- Favicon placeholder — replace with real favicon in Phase 7 -->
