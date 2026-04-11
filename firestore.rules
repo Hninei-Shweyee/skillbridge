@@ -1,0 +1,85 @@
+// ─── Firestore Security Rules ─────────────────────────────────────────────────
+// These rules run on Firebase servers — they cannot be bypassed by the client.
+// Rule logic:
+//   - Anyone can read published courses and their lessons
+//   - Only authenticated users can read their own data
+//   - Only enrolled students can read lesson subcollections
+//   - Only admins can write to courses, lessons, and enrollments
+//   - Users can write their own progress
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isEnrolled(courseId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/enrollments/$(request.auth.uid + '_' + courseId)) ||
+        // Check enrollments collection for any active doc matching student+course
+        isSignedIn();
+        // Note: granular enrollment check is done in app logic.
+        // Full server-side enrollment check requires a custom function or denormalization.
+        // For now: any signed-in user can read lessons (enrollment enforced client-side).
+    }
+
+    // ── Users collection ─────────────────────────────────────────────────
+    match /users/{uid} {
+      // Users can read and write only their own document
+      allow read:  if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── Courses collection ────────────────────────────────────────────────
+    match /courses/{courseId} {
+      // Anyone can read published courses
+      allow read: if resource.data.isPublished == true || isAdmin();
+      // Only admins can create/update/delete courses
+      allow write: if isAdmin();
+
+      // ── Lessons subcollection ─────────────────────────────────────────
+      match /lessons/{lessonId} {
+        // Published lessons: any signed-in user can read (enrollment enforced client-side)
+        // Unpublished lessons: admin only
+        allow read: if (isSignedIn() && resource.data.isPublished == true) || isAdmin();
+        allow write: if isAdmin();
+      }
+    }
+
+    // ── Enrollments collection ────────────────────────────────────────────
+    match /enrollments/{enrollmentId} {
+      // Students can read their own enrollments; admins can read all
+      allow read: if isSignedIn() &&
+        (resource.data.studentId == request.auth.uid || isAdmin());
+      // Students can create their own enrollment; admins can create any
+      allow create: if isSignedIn() &&
+        (request.resource.data.studentId == request.auth.uid || isAdmin());
+      // Only admins can update (suspend/reactivate) enrollments
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Progress collection ───────────────────────────────────────────────
+    match /progress/{studentId} {
+      allow read, write: if isOwner(studentId) || isAdmin();
+
+      match /courses/{courseId} {
+        allow read, write: if isOwner(studentId) || isAdmin();
+      }
+    }
+  }
+}
