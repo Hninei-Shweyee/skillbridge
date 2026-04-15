@@ -4,9 +4,9 @@
 // On success → redirects to /dashboard (or the page they were trying to visit).
 // On error → shows a friendly error message below the form.
 
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { signInWithEmail, signInWithGoogle } from '../../firebase/auth'
+import { signInWithEmail, signInWithGoogle, getGoogleRedirectResult } from '../../firebase/auth'
 import { useAuthStore } from '../../stores/authStore'
 
 const router = useRouter()
@@ -18,12 +18,28 @@ const email    = ref('')
 const password = ref('')
 
 // UI state
-const loading      = ref(false)
+const loading       = ref(false)
 const googleLoading = ref(false)
-const errorMessage = ref('')
+const errorMessage  = ref('')
 
 // Where to go after login (supports ?redirect=/some/page)
 const redirectTo = route.query.redirect || '/dashboard'
+
+// ─── Handle Google redirect result on page load ───────────────────────────────
+onMounted(async () => {
+  try {
+    googleLoading.value = true
+    const user = await getGoogleRedirectResult()
+    if (user) {
+      await ensureUserDoc(user)
+      router.push(redirectTo)
+    }
+  } catch (err) {
+    if (err.code) errorMessage.value = friendlyError(err.code)
+  } finally {
+    googleLoading.value = false
+  }
+})
 
 // ─── Email / Password Login ───────────────────────────────────────────────────
 async function handleEmailLogin() {
@@ -44,19 +60,14 @@ async function handleEmailLogin() {
 }
 
 // ─── Google Login ─────────────────────────────────────────────────────────────
+// Triggers the redirect to Google — result is handled in onMounted above.
 async function handleGoogleLogin() {
   errorMessage.value = ''
   googleLoading.value = true
   try {
-    const user = await signInWithGoogle()
-    // If first-time Google sign-in, create a user doc in Firestore
-    await ensureUserDoc(user)
-    router.push(redirectTo)
+    await signInWithGoogle()   // redirects away — page unloads here
   } catch (err) {
-    if (err.code !== 'auth/popup-closed-by-user') {
-      errorMessage.value = friendlyError(err.code)
-    }
-  } finally {
+    errorMessage.value = friendlyError(err.code)
     googleLoading.value = false
   }
 }
@@ -79,12 +90,13 @@ async function ensureUserDoc(user) {
 // ─── Map Firebase error codes to friendly messages ───────────────────────────
 function friendlyError(code) {
   const map = {
-    'auth/user-not-found':       'No account found with this email.',
-    'auth/wrong-password':       'Incorrect password. Please try again.',
-    'auth/invalid-email':        'Please enter a valid email address.',
-    'auth/too-many-requests':    'Too many attempts. Please try again later.',
-    'auth/invalid-credential':   'Incorrect email or password.',
-    'auth/network-request-failed': 'Network error. Check your connection.',
+    'auth/user-not-found':        'No account found with this email.',
+    'auth/wrong-password':        'Incorrect password. Please try again.',
+    'auth/invalid-email':         'Please enter a valid email address.',
+    'auth/too-many-requests':     'Too many attempts. Please try again later.',
+    'auth/invalid-credential':    'Incorrect email or password.',
+    'auth/network-request-failed':'Network error. Check your connection.',
+    'auth/unauthorized-domain':   'This domain is not authorized. Please contact support.',
   }
   return map[code] ?? 'Something went wrong. Please try again.'
 }

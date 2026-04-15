@@ -7,9 +7,9 @@
 //  3. Write a user doc to Firestore users/{uid} with role: 'student'
 //  4. Redirect to /dashboard
 
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { signUpWithEmail, signInWithGoogle } from '../../firebase/auth'
+import { signUpWithEmail, signInWithGoogle, getGoogleRedirectResult } from '../../firebase/auth'
 import { setDocument, getDocument } from '../../firebase/firestore'
 
 const router = useRouter()
@@ -63,21 +63,32 @@ async function handleSignup() {
   }
 }
 
+// ─── Handle Google redirect result on page load ───────────────────────────────
+onMounted(async () => {
+  try {
+    googleLoading.value = true
+    const user = await getGoogleRedirectResult()
+    if (user) {
+      const existing = await getDocument('users', user.uid)
+      if (!existing) await createUserDoc(user)
+      router.push('/dashboard')
+    }
+  } catch (err) {
+    if (err.code) errorMessage.value = friendlyError(err.code)
+  } finally {
+    googleLoading.value = false
+  }
+})
+
 // ─── Google Sign Up ───────────────────────────────────────────────────────────
+// Triggers the redirect to Google — result is handled in onMounted above.
 async function handleGoogleSignup() {
   errorMessage.value = ''
   googleLoading.value = true
   try {
-    const user = await signInWithGoogle()
-    // Only create user doc if it doesn't exist yet
-    const existing = await getDocument('users', user.uid)
-    if (!existing) await createUserDoc(user)
-    router.push('/dashboard')
+    await signInWithGoogle()   // redirects away — page unloads here
   } catch (err) {
-    if (err.code !== 'auth/popup-closed-by-user') {
-      errorMessage.value = friendlyError(err.code)
-    }
-  } finally {
+    errorMessage.value = friendlyError(err.code)
     googleLoading.value = false
   }
 }
@@ -85,10 +96,11 @@ async function handleGoogleSignup() {
 // ─── Friendly error messages ──────────────────────────────────────────────────
 function friendlyError(code) {
   const map = {
-    'auth/email-already-in-use': 'An account with this email already exists.',
-    'auth/invalid-email':        'Please enter a valid email address.',
-    'auth/weak-password':        'Password is too weak. Use at least 6 characters.',
-    'auth/network-request-failed': 'Network error. Check your connection.',
+    'auth/email-already-in-use':  'An account with this email already exists.',
+    'auth/invalid-email':         'Please enter a valid email address.',
+    'auth/weak-password':         'Password is too weak. Use at least 6 characters.',
+    'auth/network-request-failed':'Network error. Check your connection.',
+    'auth/unauthorized-domain':   'This domain is not authorized. Please contact support.',
   }
   return map[code] ?? 'Something went wrong. Please try again.'
 }

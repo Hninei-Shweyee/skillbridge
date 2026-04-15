@@ -6,7 +6,8 @@
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut,
   updateProfile,
@@ -30,10 +31,18 @@ export async function signInWithEmail(email, password) {
   return credential.user
 }
 
-// ─── Sign In with Google (popup) ─────────────────────────────────────────────
+// ─── Sign In / Sign Up with Google (redirect — works on all domains) ─────────
+// Redirects the browser to Google's consent screen.
+// After Google redirects back, call getGoogleRedirectResult() to get the user.
 export async function signInWithGoogle() {
-  const credential = await signInWithPopup(auth, googleProvider)
-  return credential.user
+  await signInWithRedirect(auth, googleProvider)
+}
+
+// ─── Get the result after Google redirects back to the app ───────────────────
+// Returns the Firebase user, or null if no redirect is pending.
+export async function getGoogleRedirectResult() {
+  const result = await getRedirectResult(auth)
+  return result ? result.user : null
 }
 
 // ─── Sign Out ────────────────────────────────────────────────────────────────
