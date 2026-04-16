@@ -1,0 +1,1 @@
+import{S as e,_ as t,b as n,t as r,v as i,x as a,y as o}from"./config-BshTe9Md.js";new t;async function s(t,n,a){let o=await i(r,t,n);return await e(o.user,{displayName:a}),o.user}async function c(e,t){return(await n(r,e,t)).user}async function l(){await a(r)}function u(e){return o(r,e)}export{s as i,u as n,c as r,l as t};
