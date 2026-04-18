@@ -1,0 +1,1 @@
+var e=`/skillbridge/skillbridge-logo.jpg`;export{e as t};
